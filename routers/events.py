@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 import database, models, schemas
+from sqlalchemy.exc import IntegrityError
 from .auth import get_current_user, get_current_admin, get_db
 
 router = APIRouter(
@@ -78,7 +79,11 @@ def register_for_event(event_id: int, db: Session = Depends(get_db), current_use
         raise HTTPException(status_code=400, detail="Already registered for this event")
 
     new_reg = models.Registration(user_id=current_user.id, event_id=event_id)
-    db.add(new_reg)
-    db.commit()
-    db.refresh(new_reg)
+    try:
+        db.add(new_reg)
+        db.commit()
+        db.refresh(new_reg)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Already registered for this event (Concurrency Protection)")
     return new_reg

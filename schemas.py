@@ -1,11 +1,11 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime
 
 # User Schemas
 class UserBase(BaseModel):
-    email: str
-    full_name: str
+    email: str = Field(..., max_length=255)
+    full_name: str = Field(..., max_length=100)
 
 class UserCreate(UserBase):
     password: str
@@ -32,8 +32,8 @@ class TokenData(BaseModel):
 
 # Event Schemas
 class EventBase(BaseModel):
-    title: str
-    description: str
+    title: str = Field(..., max_length=200)
+    description: str = Field(..., max_length=5000)
     date_time: datetime
     location: str
 

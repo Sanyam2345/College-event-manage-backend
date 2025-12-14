@@ -1,10 +1,13 @@
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Text
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from database import Base
 
 class User(Base):
-    __tablename__ = "users"
+    # Prefix 'college_' ensures isolation in the shared database.
+    # This prevents conflicts with other tables (e.g., from the portfolio project)
+    # residing in the same PostgreSQL instance.
+    __tablename__ = "college_users"
 
     id = Column(Integer, primary_key=True, index=True)
     full_name = Column(String, index=True)
@@ -15,7 +18,7 @@ class User(Base):
     registrations = relationship("Registration", back_populates="user")
 
 class Event(Base):
-    __tablename__ = "events"
+    __tablename__ = "college_events"
 
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, index=True)
@@ -27,11 +30,12 @@ class Event(Base):
     registrations = relationship("Registration", back_populates="event")
 
 class Registration(Base):
-    __tablename__ = "registrations"
+    __tablename__ = "college_registrations"
+    __table_args__ = (UniqueConstraint('user_id', 'event_id', name='uq_user_event'),)
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
-    event_id = Column(Integer, ForeignKey("events.id"))
+    user_id = Column(Integer, ForeignKey("college_users.id"))
+    event_id = Column(Integer, ForeignKey("college_events.id"))
     registration_date = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="registrations")

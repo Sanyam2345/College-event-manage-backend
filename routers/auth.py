@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import IntegrityError as integrity_error
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import timedelta
@@ -72,7 +73,11 @@ def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
         hashed_password=hashed_password,
         is_admin=user.is_admin
     )
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
+    try:
+        db.add(db_user)
+        db.commit()
+        db.refresh(db_user)
+    except integrity_error:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Email already registered")
     return db_user
