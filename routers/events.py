@@ -113,8 +113,11 @@ def register_for_event(event_id: int, db: Session = Depends(get_db), current_use
         raise HTTPException(status_code=400, detail="Event has already ended (Expired)")
 
     # 2. Check Status (Lifecycle Check)
-    if event.status == "COMPLETED" or event.status == "CANCELLED":
-         raise HTTPException(status_code=400, detail=f"Event is {event.status.lower()}")
+    # CRITICAL FIX: Explicitly allow ONLY 'APPROVED' or 'UPCOMING'
+    # Block 'PENDING', 'COMPLETED', 'CANCELLED', or any other valid-looking string
+    allowed_statuses = ["APPROVED", "UPCOMING"]
+    if event.status not in allowed_statuses:
+         raise HTTPException(status_code=400, detail=f"Event is not approved for registration (Status: {event.status})")
     
     # 3. Capacity Check
     current_count = len(event.registrations)
