@@ -23,8 +23,43 @@ def read_upcoming_events(db: Session = Depends(get_db)):
     # In a real app we filter by date >= now, but for demo we just show next 3
     return events
 
+@router.get("/admin/stats")
+def get_admin_stats(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_admin)):
+    # Lightweight Admin Analytics
+    total_events = db.query(models.Event).count()
+    total_registrations = db.query(models.Registration).count()
+    total_users = db.query(models.User).count()
+    
+    # Most popular event logic
+    # (Simple naive implementation for quick fix)
+    events = db.query(models.Event).all()
+    most_popular = max(events, key=lambda e: len(e.registrations)) if events else None
+    
+    return {
+        "total_events": total_events,
+        "total_registrations": total_registrations,
+        "total_users": total_users,
+        "most_popular_event": most_popular.title if most_popular else "None"
+    }
+
 @router.get("/", response_model=List[schemas.Event])
 def read_events(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    # Automation: Lazy Auto-Close
+    # Check for past events and mark them COMPLETED
+    from datetime import datetime
+    now = datetime.utcnow()
+    
+    # Find UPCOMING events that are in the past
+    expired_events = db.query(models.Event).filter(
+        models.Event.status == "UPCOMING",
+        models.Event.date_time < now
+    ).all()
+    
+    if expired_events:
+        for event in expired_events:
+            event.status = "COMPLETED"
+        db.commit() # Lazy update commit
+    
     events = db.query(models.Event).offset(skip).limit(limit).all()
     return events
 
@@ -69,6 +104,22 @@ def register_for_event(event_id: int, db: Session = Depends(get_db), current_use
     event = db.query(models.Event).filter(models.Event.id == event_id).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
+        
+    # CRITICAL FIX: Enforce validation inside the API
+    # 1. Check if event is expired (Time Check)
+    # Use datetime.utcnow() to match database UTC storage
+    from datetime import datetime
+    if event.date_time < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="Event has already ended (Expired)")
+
+    # 2. Check Status (Lifecycle Check)
+    if event.status == "COMPLETED" or event.status == "CANCELLED":
+         raise HTTPException(status_code=400, detail=f"Event is {event.status.lower()}")
+    
+    # 3. Capacity Check
+    current_count = len(event.registrations)
+    if current_count >= event.capacity:
+        raise HTTPException(status_code=400, detail="Event is full (Capacity Reached)")
 
     # Check if already registered
     existing_reg = db.query(models.Registration).filter(
@@ -78,6 +129,17 @@ def register_for_event(event_id: int, db: Session = Depends(get_db), current_use
     if existing_reg:
         raise HTTPException(status_code=400, detail="Already registered for this event")
 
+    # 4. Conflict Detection (User Experience Automation)
+    conflict_warning = None
+    # Check for other events at same time
+    overlapping = db.query(models.Registration).join(models.Event).filter(
+        models.Registration.user_id == current_user.id,
+        models.Event.date_time == event.date_time
+    ).first()
+    
+    if overlapping:
+        conflict_warning = f"Warning: You have a time conflict with event '{overlapping.event.title}'"
+
     new_reg = models.Registration(user_id=current_user.id, event_id=event_id)
     try:
         db.add(new_reg)
@@ -86,4 +148,7 @@ def register_for_event(event_id: int, db: Session = Depends(get_db), current_use
     except IntegrityError:
         db.rollback()
         raise HTTPException(status_code=400, detail="Already registered for this event (Concurrency Protection)")
+    
+    # Attach warning to response (not stored in DB, strictly runtime feedback)
+    new_reg.conflict_warning = conflict_warning
     return new_reg

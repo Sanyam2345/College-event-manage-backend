@@ -38,10 +38,13 @@ class EventBase(BaseModel):
     location: str
 
 class EventCreate(EventBase):
-    pass
+    capacity: int = 100
 
 class Event(EventBase):
     id: int
+    capacity: int
+    status: str
+    registrations_count: Optional[int] = 0
     created_at: datetime
 
     class Config:
@@ -58,6 +61,7 @@ class Registration(RegistrationBase):
     id: int
     user_id: int
     registration_date: datetime
+    conflict_warning: Optional[str] = None
 
     class Config:
         orm_mode = True

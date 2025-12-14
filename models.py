@@ -25,9 +25,15 @@ class Event(Base):
     description = Column(Text)
     date_time = Column(DateTime)
     location = Column(String)
+    capacity = Column(Integer, default=100)
+    status = Column(String, default="UPCOMING")
     created_at = Column(DateTime, default=datetime.utcnow)
 
     registrations = relationship("Registration", back_populates="event")
+
+    @property
+    def registrations_count(self):
+        return len(self.registrations)
 
 class Registration(Base):
     __tablename__ = "college_registrations"
